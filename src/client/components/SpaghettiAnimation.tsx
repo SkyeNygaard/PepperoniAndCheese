@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import ItalianChef from './ItalianChef';
@@ -8,6 +8,7 @@ import ItalianLandmarks from './ItalianLandmarks';
 const SpaghettiAnimation: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioLoaded, setAudioLoaded] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -103,19 +104,33 @@ const SpaghettiAnimation: React.FC = () => {
     // Start animation
     animate();
 
-    // Add background music
+    // Update audio loading logic
     audioRef.current = new Audio('/audio/tarantella.mp3');
     audioRef.current.loop = true;
     audioRef.current.volume = 0.3;
-    audioRef.current.play().catch((error) => {
-      console.log('Note: Please add a tarantella.mp3 file to public/audio/ for the full experience');
-      console.warn('Audio playback failed:', error);
+
+    // Add event listeners for audio loading
+    audioRef.current.addEventListener('canplaythrough', () => {
+      setAudioLoaded(true);
+      audioRef.current?.play().catch((error) => {
+        console.warn('Audio playback failed:', error);
+      });
     });
+
+    audioRef.current.addEventListener('error', (e) => {
+      console.error('Audio loading failed:', e);
+      console.log('Note: Please add a tarantella.mp3 file to public/audio/ for the full experience');
+    });
+
+    // Load the audio
+    audioRef.current.load();
 
     // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
       if (audioRef.current) {
+        audioRef.current.removeEventListener('canplaythrough', () => {});
+        audioRef.current.removeEventListener('error', () => {});
         audioRef.current.pause();
         audioRef.current = null;
       }
