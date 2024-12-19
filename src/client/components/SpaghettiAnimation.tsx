@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import ItalianChef from './ItalianChef';
@@ -9,6 +9,19 @@ const SpaghettiAnimation: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioLoaded, setAudioLoaded] = useState(false);
+
+  const handleFirstInteraction = useCallback((e: MouseEvent) => {
+    console.log('Interaction detected', { audioLoaded, audioRef: !!audioRef.current });
+    if (audioRef.current && audioLoaded) {
+      console.log('Attempting to play audio');
+      audioRef.current.play().then(() => {
+        console.log('Audio playing successfully');
+        window.removeEventListener('click', handleFirstInteraction);
+      }).catch(error => {
+        console.warn('Audio playback failed:', error);
+      });
+    }
+  }, [audioLoaded]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -109,36 +122,55 @@ const SpaghettiAnimation: React.FC = () => {
     audioRef.current.loop = true;
     audioRef.current.volume = 0.3;
 
-    // Add event listeners for audio loading
-    audioRef.current.addEventListener('canplaythrough', () => {
+    console.log('Setting up audio');
+
+    const handleCanPlayThrough = () => {
+      console.log('Audio can play through');
       setAudioLoaded(true);
-      audioRef.current?.play().catch((error) => {
-        console.warn('Audio playback failed:', error);
-      });
-    });
+      window.addEventListener('click', handleFirstInteraction);
+    };
+
+    // Add event listeners for audio loading
+    audioRef.current.addEventListener('canplaythrough', handleCanPlayThrough);
 
     audioRef.current.addEventListener('error', (e) => {
       console.error('Audio loading failed:', e);
+      const audio = audioRef.current;
+      if (audio) {
+        console.error('Audio error details:', {
+          error: audio.error,
+          networkState: audio.networkState,
+          readyState: audio.readyState,
+          src: audio.src
+        });
+      }
       console.log('Note: Please add a tarantella.mp3 file to public/audio/ for the full experience');
     });
 
-    // Load the audio
-    audioRef.current.load();
+    // Verify file exists before loading
+    fetch('/audio/tarantella.mp3')
+      .then(response => {
+        if (!response.ok) throw new Error('Audio file not found');
+        console.log('Audio file exists');
+        audioRef.current?.load();
+      })
+      .catch(error => console.error('Failed to verify audio file:', error));
 
     // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
       if (audioRef.current) {
-        audioRef.current.removeEventListener('canplaythrough', () => {});
+        audioRef.current.removeEventListener('canplaythrough', handleCanPlayThrough);
         audioRef.current.removeEventListener('error', () => {});
         audioRef.current.pause();
         audioRef.current = null;
       }
+      window.removeEventListener('click', handleFirstInteraction);
       if (containerRef.current) {
         containerRef.current.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [handleFirstInteraction]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100vh' }} />;
 };
